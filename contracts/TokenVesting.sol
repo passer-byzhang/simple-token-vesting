@@ -91,6 +91,59 @@ contract TokenVesting is Owned, ReentrancyGuard {
         vestingAddresses.push(_beneficiary);
     }
 
+    function batchCreateVestingSchedule(
+        address[] calldata _beneficiaries,
+        uint256[] calldata _starts,
+        uint256[] calldata _cliffs,
+        uint256[] calldata _durations,
+        uint256[] calldata _slicePeriodSeconds,
+        uint256[] calldata _amounts
+    ) external onlyOwner {
+        // 检查输入数组长度是否一致
+        require(
+            _beneficiaries.length == _starts.length &&
+            _beneficiaries.length == _cliffs.length &&
+            _beneficiaries.length == _durations.length &&
+            _beneficiaries.length == _slicePeriodSeconds.length &&
+            _beneficiaries.length == _amounts.length,
+            "TokenVesting: input arrays must have same length"
+        );
+
+        // 计算总金额
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < _amounts.length; i++) {
+            totalAmount += _amounts[i];
+        }
+
+        // 检查合约中是否有足够的代币
+        require(
+            getWithdrawableAmount() >= totalAmount,
+            "TokenVesting: cannot create vesting schedules because not sufficient tokens"
+        );
+
+        // 批量创建vesting schedules
+        for (uint256 i = 0; i < _beneficiaries.length; i++) {
+            require(_durations[i] > 0, "TokenVesting: duration must be > 0");
+            require(_amounts[i] > 0, "TokenVesting: amount must be > 0");
+            require(
+                _slicePeriodSeconds[i] >= 1,
+                "TokenVesting: slicePeriodSeconds must be >= 1"
+            );
+            require(_durations[i] >= _cliffs[i], "TokenVesting: duration must be >= cliff");
+
+            uint256 cliff = _starts[i] + _cliffs[i];
+            vestingSchedules[_beneficiaries[i]] = VestingSchedule(
+                cliff,
+                _starts[i],
+                _durations[i],
+                _slicePeriodSeconds[i],
+                _amounts[i],
+                0
+            );
+            vestingSchedulesTotalAmount = vestingSchedulesTotalAmount + _amounts[i];
+            vestingAddresses.push(_beneficiaries[i]);
+        }
+    }
 
     /**
      * @notice Withdraw the specified amount if possible.
